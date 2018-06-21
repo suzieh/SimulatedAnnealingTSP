@@ -1,0 +1,415 @@
+---
+title: "Simulated Annealing"
+author: "Suzie Hoops"
+date: "21/06/2018"
+output: html_document
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# Load Libraries (PLEASE NOTE: May need to install the necessary packages before running this RMarkdown file)
+#install.packages("maps")
+#install.packages("geosphere")
+#install.packages("maptools")
+#install.packages("latticeExtra")
+#install.packages("magick")
+library(maps)
+library(geosphere)
+library(maptools)
+library(latticeExtra)
+library(magick)
+```
+
+Here we explore a meta-heuristic method of optimization known as **"Simulated Annealing"**, a popular heuristic optimization algorithm, most commonly used in minimizing functions of large computational complexity. We will explore this algorithm through it's application to the widely-known Traveling Salesperson Problem.
+
+## Simulated Annealing Algorithm
+
+### Background
+
+Simulated annealing was inspired by the metal working process of annealing, in which the heating and gradual cooling of the metal allows for the physical properties of the metal to be altered.
+
+In this  algorithm, we maintain a "temperature" paramter to mimic the annealing process. The temperature is initailly very high, and cools as the algorithm works. But what does the temperature parameter actually do within the algorithm? To find out, let's explore the difference between a simulated annealing algorithm and a greedy algorithm.
+
+Simulated Annealing is a meta-heuristic optimization method. "Heuristic" come from the Greek word "heuriskein" meaning to find or discover. This is an appropriate naming, as simulated annealing and other heuristic algorithms seek to find optimal or near-optimal solutions through various non-exact tactics so as to minimize computational complexity.
+
+### Simulated Annealing vs. Greedy
+
+<center><img src=https://www.seas.upenn.edu/~andre/courses/CS294S97/notes/day15/23.gif></center>
+
+<center>[image source](https://www.seas.upenn.edu/~andre/courses/CS294S97/notes/day15/23.gif)</center>
+
+Consider the graph above with numerous local minima and the marked global minimum. In a greedy algorithm, no matter where you began your search and the step size, your algorithm would always move to the nearest minima alone since it only seeks steps with a smaller value. However, we can see that if our initial point were between the marked local minima, the algorithm would become satisfied with these minima alone, despite the existence of a better global minimum.
+
+The temperature parameter of simluated annealing allows us to explore even steps which appear to be worse than the current state. When the temperature is high, the algorithm has a higher probability of allowing for a "worse" step to be made, thus allowing more of the graph to be explored and the global minimum is more likely to be found regardless of the starting position of the algorithm.
+
+### Algorithm
+
+Here is a pseudo-code example of the general simulated annealing process:
+```{eval = FALSE}
+function simulated_annealing ( start_search, iter_max, cooling_function(iter) )
+    temperature = some initial high value
+    iter = 0
+    best = start_search
+    repeat until iter >= iter_max :
+        neighbor = select neighbor of current search
+        if exponential((best - neighbor)/temp) >= random_probability :
+            best = neighbor
+        temperature = cooling_function(iter)
+        iter = iter + 1
+    return best
+end function
+```
+
+
+## The Traveling Salesperson Problem
+
+<center><img src="https://cdn4.dogonews.com/system/ckeditor_assets/pictures/50688b791860e0275b000f45/content_bbeeTSP2.jpg"></center>
+
+<center>[image source](https://cdn4.dogonews.com/system/ckeditor_assets/pictures/50688b791860e0275b000f45/content_bbeeTSP2.jpg)</center>
+
+### Background
+
+The Traveling Salesperson Problem (commonly abbreviated to TSP) asks a deceptively simple question:
+
+> "Given a list of cities and distances between them, what is the shortest possible route that visits each city and returns to the original city?"
+
+Consider the picture above. Let's say our salesperson wants to start and end their day at the Gym. We want to find the tour of locations with the smallest overall distance. Such a tour is our ideal solution, which is shown above in the red arrows. Seems simple enough, right? Well, maybe for only six locations it isn't so bad...
+
+This problem was **first formulated in 1930**, and has since been an intensely studied problem in optimization.
+
+TSP is actually considered an **NP-hard problem** in combinatorial optimization, as the number of possible solutions is the factorial of the number of cities ( in big-O notation: **O(n!)** ). Let's put that in perspective: For our problem, we will be exploring a TSP with 44 cites, meaning we hope to find the best of 44! = 2.65827e+54 possible solutions. Computing all of these and their relative distances would be an overwhelming computational task, so we must turn to heuristic optimization methods to determine an approximate solution with greater efficiency. That is where Simulated Annealing comes into play.
+
+<center>**Let's get started!**</center>
+
+### City Data: European Tour
+
+Our Traveling Salesperson has been tasked with visiting most of Continental Europe, so we are going to be helping him travel to each of the European capitals. The data can be found in the git repo.
+
+```{r data}
+# Load Data & Clean
+citydata <- read.csv(url("https://raw.githubusercontent.com/suzieh/SimulatedAnnealingTSP/master/data/cities_data.csv"))
+citydata <- subset(citydata, select=c("city","lon", "lat"))
+citydata <- citydata[!(citydata$city == "Reykjavik, Iceland"),]
+
+# Create Distance Matrix
+distance_matrix <- matrix(nrow = nrow(citydata), ncol = nrow(citydata))
+for (i in 1:nrow(citydata)) {
+  current <- c(citydata$lon[i], citydata$lat[i])
+  distanceFromCurr <- apply(citydata[,c("lon", "lat")], 1, function (row) { distHaversine(c(row[1], row[2]), c(citydata$lon[i], citydata$lat[i])) })
+  distance_matrix[i,] <- distanceFromCurr
+}
+```
+
+### Helper Functions
+
+We will need various functions for the Simulated Annealing process, all of which are defined and explained here.
+
+
+#### Neighbors
+In order to explore new routes, we want to change part of the current tour and determine if the change is an improvement or not. To determine a "neighbor" for a given tour, we reverse a randomly determined section of the tour.
+
+```{r func_nbr, error=FALSE, warning=FALSE}
+#### Neighbor Function
+find_neighbor <- function (route) {
+  len <- length(route)
+  newroute <- route
+  # randomly reverse route between two random locations (excluding the start/end)
+  swap <- sample(2:(len-1), 2, replace = FALSE)
+  newroute[swap[1]:swap[2]] <- rev(newroute[swap[1]:swap[2]])
+  return(newroute)
+}
+```
+
+
+#### Get Tour Distance
+This function calculates the tour distance.
+```{r func_dist}
+get_dist <- function (route) {
+  sum <- 0
+  for (i in 1:(length(route)-1)) {
+    sum <- sum + distance_matrix[route[i], route[i+1]]
+  }
+  return(sum)
+}
+```
+
+
+#### Compare Tour Distances
+This function calculates the relative distance between the two tours. A positive result indicates the new tour is shorter, while a negative result indicates the new tour is worse than the current one.
+```{r func_diff, error=FALSE, warning=FALSE}
+get_diff <- function (route_next, route_x) {
+  # calculate route distances
+  sum_next <- get_dist(route_next)
+  sum_x <- get_dist(route_x)
+  # determine difference
+  diff <- sum_x - sum_next
+  return(diff)
+}
+```
+
+
+#### Cooling Function
+This function is a key aspect of Simulated Annealing. The temperature determines how "random" the environment is, allowing for expanded exploration through an increased rate of accepting "worse" conditions. I have elected to use Newton's Law of Cooling here: _dT/dt = -ky_. Where _dT/dt_ is the change in temperature over time (in our case, iterations), _k_ is a constant for intensity of cooling, and _y_ is the current temperature state.
+```{r func_cool, error=FALSE, warning=FALSE}
+temperature <- function (t0, k, n) {
+  # t0 : initial temperature
+  # n : current iteration step
+  # Apply Newton's Law of Cooling
+  k <- k/10
+  newtemp <- t0 * exp(-k * n)
+  return(newtemp)
+}
+```
+
+
+#### Drawing Functions
+These functions draw the maps and graphs showing the progress of the algorithm.
+```{r draw_map}
+# *note: these functions assume use of the 'citydata' provided,
+#        if you wish to use your own data set, you must change
+#        all apropriate functions as well, including the map
+#        function below.
+
+# Adjust Map to Window Size
+plotmap2spdf <- function (mp) {
+  # Convert data from a "maps" object to a "SpatialPolygonsDataFrame" object
+  SP <- map2SpatialPolygons(mp, IDs = mp$names,
+                            proj4string = CRS("+proj=longlat +datum=WGS84"))
+  DATA <- data.frame(seq_len(length(SP)), row.names = names(SP))
+  SPDF <- SpatialPolygonsDataFrame(SP, data = DATA)
+  return(SPDF)
+}
+
+# Drawing Map
+draw_map <- function (tour) {
+  ## Conversion
+  mp <- map(database = "world", fill = TRUE, col = "grey80", border = "grey40",
+            xlim = c(-10,40), ylim = c(32, 65), plot = FALSE)
+  spdf <- plotmap2spdf(mp)
+  
+  ## Countries and borders (use convert)
+  out <- spplot(spdf, col.regions = "grey80", colorkey = FALSE,
+                xlim = c(-10,40), ylim = c(32,65))
+
+  ## Cities
+  out <- out + layer(panel.points(lon, lat, type = "p", pch = 19, cex = .8, col = "black"), data = citydata)
+
+  ## Tour
+  x0 <- c() # vector of x values (from)
+  y0 <- c() # vector of y values (from)
+  x1 <- c() # vector of x values (to)
+  y1 <- c() # vector of y values (to)
+  for (i in 1:(length(tour)-1)) {
+    x0 <- c(x0, citydata$lon[tour[i]])
+    y0 <- c(y0, citydata$lat[tour[i]])
+    x1 <- c(x1, citydata$lon[tour[i+1]])
+    y1 <- c(y1, citydata$lat[tour[i+1]])
+  }
+  mydf <- data.frame("x0" = x0, "y0" = y0, "x1" = x1, "y1" = y1)
+  out <- out + layer(panel.segments(x0, y0, x1, y1, col="black", lwd = 1), data = mydf)
+  
+  ## Return plot
+  return(out)
+}
+```
+
+```{r draw_temps}
+# Drawing Temperatures
+draw_temps <- function (temps) {
+  len <- length(temps)
+  ## Create Plot
+  p <- plot(temps, pch = 20, xlim = c(0, len), ylim = c(0,2000),
+            xlab = "", ylab = "Temperature", main = "Temperatures")
+  p <- p + lines(temps, type = "l", lwd = 1.5)
+  ## Return plot
+  return(p)
+}
+```
+
+```{r draw_dists}
+# Drawing Distances
+draw_dists <- function (dists) {
+  len <- length(dists)
+  max <- max(dists)
+  min <- min(dists)
+  ## Create Plot
+  p <- plot(dists, pch = 20, xlim = c(0, len), ylim = c(min,max),
+            xlab = "", ylab = "Tour Distance", main = "Distances")
+  p <- p + lines(dists, type = "l", lwd = 1.5)
+  ## Return plot
+  return(p)
+}
+```
+
+
+### Simulated Annealing Function
+Here we have the main body of the simulated annealing algorithm, beginning with a random tour we will then try to optimize. Note that the start/end location is also randomly chosen.
+```{r main}
+# Simulated Annealing Main Function
+simulated_annealing <- function(n_max=1500, t0=1000, k=.6, p=0.4) {
+  # Parameters
+  ## n_max : number of iterations
+  ## t0 : initial temperature
+  ## k : constant for cooling rate (exponential function)
+  ## p : probability of accepting worse case
+  
+  # Tracking Temp/Distances/Tours
+  all_temperatures <- c()
+  all_distances <- c()
+  tour_progress <- list()
+  # Create an intial tour
+  x <- sample(1:nrow(citydata), nrow(citydata), replace = FALSE)
+  x <- c(x,x[1])   # make sure last entry matches first
+  x_best <- x      # initial tour is best known
+  n <- 0           # keep track of iterations
+  
+  # Begin Loop
+  while (n <= n_max) {
+    # Set initial values
+    temp <- temperature(t0, k, n)
+    x_next <- find_neighbor(x)
+    diff_val <- get_diff(x_next, x)
+    # Determine whether to accept next iteration
+    if (diff_val > 0) {
+      x <- x_next
+    } else if (exp(diff_val/temp) >= p) {
+      x <- x_next
+    }
+    # Change current best as needed
+    if (get_diff(x, x_best) > 0) {
+      x_best <- x
+    }
+    # Keep track of temperatures, accepted tour distances
+    all_temperatures <- c(all_temperatures, temp)
+    all_distances <- c(all_distances, get_dist(x))
+    # Every 100 iterations, record current tour
+    if (n %% 100 == 0) {
+      curr <- (n / 100) + 1
+      tour_progress[[curr]] <- x
+    }
+    # Update iteration
+    n <- n+1
+  }
+  
+  # Return the x_best, all_temperatures, all_distances, tour_progress
+  ret <- list(x_best, all_temperatures, all_distances, tour_progress)
+  return(ret)
+}
+```
+
+
+
+## Interactive Exploration
+Select your desired parameters and press "RUN SIMULATION" to see how your simulation plays out.
+```{r shiny, echo=FALSE}
+library(shiny)
+# Shiny UI
+ui <- shinyUI(fluidPage(
+  # Title
+  title = "Traveling Salesperson Problem with Simulated Annealing",
+  hr(),
+  
+  # First Row - Inputs
+  fluidRow(
+    inputPanel(
+           selectInput("iterations", label = "Number of Iterations",
+                       c(100, 500, 1000, 1500, 2500, 5000, 10000), selected = 1500),
+           sliderInput("init_temp", label = "Initial Temperature:",
+                       value = 1500, min = 500, max = 2000, step = 100),
+           sliderInput("cool_rate", label = "Cooling Constant:",
+                       value = 0.05, min = 0, max = 0.1, step = 0.01),
+           actionButton("run_button", "RUN SIMULATION")
+    )
+  ),
+  
+  # Second Row - Final Outputs
+  fluidRow(
+    column(7,
+           h4("Best Tour Found"),
+           plotOutput("best_map", height="500px")),
+    column(5,
+           h4("Algorithm Progression"),
+           plotOutput("temperature_plot", height="250px"),
+           plotOutput("distances_plot", height="250px"))
+  ),
+  
+  # Third Row - Gif
+  fluidRow(
+    column(12,
+           h4("Animation of Simulated Annealing Process"),
+           imageOutput("map_gif"), height = "500 px")
+  )
+))
+
+# Shiny Server
+server <- shinyServer(function(input, output, session) {
+  
+  # Event Reactive (delay until button pressed)
+  dataInput <- eventReactive(input$run_button, {
+    # run simulation
+    iter <- as.integer(input$iterations)
+    simulation <- simulated_annealing(iter, input$init_temp, input$cool_rate, 0.4)
+    simulation
+  })
+    
+  # Define output plots
+  output$best_map <- renderPlot({
+    sim <- dataInput()
+    draw_map(sim[[1]]) # pass best tour
+    }, height = 500)
+    
+  output$temperature_plot <- renderPlot({
+    sim <- dataInput()
+    draw_temps(sim[[2]]) # pass temps
+    }, height = 250)
+    
+  output$distances_plot <- renderPlot({
+    sim <- dataInput()
+    draw_dists(sim[[3]]) # pass dists
+    }, height = 250)
+  
+  output$map_gif <- renderImage({
+    sim <- dataInput()
+    # temporary file for gif
+    outfile <- tempfile(fileext = '.gif')
+    
+    # draw maps and gif here
+    ## get frames
+    frames <- length(sim[[4]])
+    ## function for Renaming
+    rename <- function (x) {
+      if (x < 10) {
+        return(name <- paste('00', x, 'plot', sep=''))
+      } else if (x >= 10) {
+        return(name <- paste('0', x, 'plot', sep=''))
+      }
+    }
+    ## loop through frames (saving each as .png in working directory)
+    for (i in 1:frames) {
+      name <- rename(i)
+      name <- tempfile(fileext = '.png')
+      png(name)
+      mymp <- draw_map(sim[[4]][[i]])
+      print({mymp})
+      dev.off()
+    }
+    ## create animation with ImageMagick
+    list.files(pattern = "*.png", full.names = T) %>%
+      purrr::map(image_read) %>%     # read each path file
+      image_join() %>%               # joins image
+      image_animate(fps=2) %>%       # animates (option exists for number of loops)
+      image_write("outfile.gif")   # write gif to current dir
+    
+    # return list containing filename
+    list(src = "outfile.gif",
+         contentType = 'image/gif')
+  }, deleteFile = TRUE)
+  
+})
+
+shinyApp(ui, server, options = list(height = 800) )
+```
+
+
+Thank you for exploring this heuristic optimization algorithm with me today! 
