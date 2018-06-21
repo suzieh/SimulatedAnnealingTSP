@@ -380,15 +380,14 @@ server <- shinyServer(function(input, output, session) {
     ## function for Renaming
     rename <- function (x) {
       if (x < 10) {
-        return(name <- paste('00', x, 'plot', sep=''))
+        return(name <- paste('00', x, 'plot.png', sep=''))
       } else if (x >= 10) {
-        return(name <- paste('0', x, 'plot', sep=''))
+        return(name <- paste('0', x, 'plot.png', sep=''))
       }
     }
     ## loop through frames (saving each as .png in working directory)
     for (i in 1:frames) {
       name <- rename(i)
-      name <- tempfile(fileext = '.png')
       png(name)
       mymp <- draw_map(sim[[4]][[i]])
       print({mymp})
@@ -411,21 +410,28 @@ server <- shinyServer(function(input, output, session) {
 shinyApp(ui, server, options = list(height = 800) )
 ```
 
+
+***
+
+
 ## Other Applications
 
 Simulated annealing is a popular optimization technique for many computational tasks besides TSP. Here is a list of a few examples of other uses:
+
 * Linear Search : The Intestine Problem
-  + A non-convex landscape is explored to find the global minimum
-  + Best entry point to intestine must be found, given 3D representation of risks, minimize defects
-  + These scientists explain their methods in their [video](https://www.coursera.org/lecture/solving-algorithms-discrete-optimization/3-4-4-simulated-annealing-EkDlK)
+    + A non-convex landscape is explored to find the global minimum
+    + Best entry point to intestine must be found, given 3D representation of risks, minimize defects
+    + These scientists explain their methods in their [video](https://www.coursera.org/lecture/solving-algorithms-discrete-optimization/3-4-4-simulated-annealing-EkDlK)
+
 * Genetics : Phylogeny Reconstruction
-  + Determine most plausible phylogeny given a set of criteria
-  + Calculation of phylogenies is an NP-complete problem, so 
-  + Their [paper](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4912009/) further details the methods and support for this analysis.
+    + Determine most plausible phylogeny given a set of criteria
+    + Calculation of phylogenies is an NP-complete problem, so 
+    + Their [paper](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4912009/) further details the methods and support for this analysis.
+
 * Marketing : Modeling Customer Behavior
-  + Predictive modeling of customer purchasing behavior
-  + Algorithm predicts which items will be purchased together
-  + Methods explained in their paper available [here](https://www.researchgate.net/profile/Dr_Binod_Kumar/publication/322539331_Optimizing_Predictive_Modelling_of_Customer_Behaviour_Using_Simulated_Annealing/links/5a5f161fa6fdcc68fa9a3cfb/Optimizing-Predictive-Modelling-of-Customer-Behaviour-Using-Simulated-Annealing.pdf)
+    + Predictive modeling of customer purchasing behavior
+    + Algorithm predicts which items will be purchased together
+    + Methods explained in their paper available [here](https://www.researchgate.net/profile/Dr_Binod_Kumar/publication/322539331_Optimizing_Predictive_Modelling_of_Customer_Behaviour_Using_Simulated_Annealing/links/5a5f161fa6fdcc68fa9a3cfb/Optimizing-Predictive-Modelling-of-Customer-Behaviour-Using-Simulated-Annealing.pdf)
 
 
 Thank you for exploring this heuristic optimization algorithm with me today! 
