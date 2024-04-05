@@ -1,0 +1,11 @@
+# Initialize the project, listing necessary packages
+#install.packages("maps")
+#install.packages("geosphere")
+#install.packages("maptools")
+#install.packages("latticeExtra")
+#install.packages("magick")
+library(maps)
+library(geosphere)
+library(maptools)
+library(latticeExtra)
+library(magick)
